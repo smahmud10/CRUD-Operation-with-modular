@@ -1,47 +1,20 @@
-import express, { Request, Response } from "express";
-import { Pool } from "pg";
-import dotenv from "dotenv";
-import path from "path";
-dotenv.config({ path: path.join(process.cwd(), ".env") });
+import express, { NextFunction, Request, Response } from "express";
+
+import config from "./config";
+import initDB, { pool } from "./config/db";
+
 const app = express();
-const port = 5000;
+const port = config.port;
+// parser
 app.use(express.json());
 
-const pool = new Pool({
-  connectionString: `${process.env.CONNECTION_STR}`,
-});
-
-const initDB = async () => {
-  await pool.query(`
-
-CREATE TABLE IF NOT EXISTS users(
-id SERIAL PRIMARY KEY,
-name VARCHAR(150)NOT NULL,
-email VARCHAR(150)UNIQUE NOT NULL,
-age INT,
-phone VARCHAR(20),
-address TEXT,
-created_at TIMESTAMP DEFAULT NOW(),
-updated_at TIMESTAMP DEFAULT NOW()
-)
-  `);
-
-  await pool.query(`
-  CREATE TABLE IF NOT EXISTS todos(
-  id SERIAL PRIMARY KEY,
-  user_id INT REFERENCES users(id) ON DELETE CASCADE,
-  title VARCHAR(200) NOT NULL,
-  description TEXT,
-  completed BOOLEAN DEFAULT false,
-due_date DATE,
-created_at TIMESTAMP DEFAULT NOW(),
-updated_at TIMESTAMP DEFAULT NOW()
-
-  )
-  `);
-};
-
 initDB();
+
+// logger middleware
+const logger = (req: Request, res: Response, next: NextFunction) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}\n`);
+  next();
+};
 
 // Parser
 
@@ -236,7 +209,7 @@ app.get("/todos", async (req: Request, res: Response) => {
 });
 
 // Get single todo
-app.get("/todos/:id", async (req, res) => {
+app.get("/todos/:id", async (req: Request, res: Response) => {
   try {
     const result = await pool.query("SELECT * FROM todos WHERE id = $1", [
       req.params.id,
@@ -254,7 +227,7 @@ app.get("/todos/:id", async (req, res) => {
 });
 
 // Update todo
-app.put("/todos/:id", async (req, res) => {
+app.put("/todos/:id", async (req: Request, res: Response) => {
   const { title, completed } = req.body;
 
   try {
@@ -275,7 +248,7 @@ app.put("/todos/:id", async (req, res) => {
 });
 
 // Delete todo
-app.delete("/todos/:id", async (req, res) => {
+app.delete("/todos/:id", async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       "DELETE FROM todos WHERE id=$1 RETURNING *",
@@ -291,6 +264,14 @@ app.delete("/todos/:id", async (req, res) => {
     console.log(err);
     res.status(500).json({ error: "Failed to delete todo" });
   }
+});
+
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+    path: req.path,
+  });
 });
 
 app.listen(port, () => {
